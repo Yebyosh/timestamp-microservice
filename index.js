@@ -33,7 +33,7 @@ app.get("/api/:date", (req, res) => {
   const {date} = req.params;
   console.log(`0: ${date}`);
   console.log(`0': ${Date.parse(date)}`);
-   
+
   if (isNaN(Date.parse(date))) {
     if (Number(date)) {
       const unix_time = Number(date);
@@ -56,6 +56,17 @@ app.get("/api/:date", (req, res) => {
     res.json({unix: unix_time, utc: utc_time});
   }
 
+});
+
+app.get("/api", function (req, res) {
+//  console.log("no param");
+  const unix_time = Date.now();
+  const utc_time = new Date().toUTCString();
+
+  console.log(`3: ${unix_time}`);
+  console.log(`3: ${utc_time}`);
+
+  res.json({unix: unix_time, utc: utc_time});
 });
 
 // Listen on port set in environment variable or default to 3000
