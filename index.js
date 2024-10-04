@@ -1,75 +1,114 @@
-// index.js
-// where your node app starts
+require('dotenv').config();
+const mongoose = require('mongoose');
+const express = require('express');
+const cors = require('cors');
+const app = express();
+const dns = require('node:dns');
+let bodyParser = require('body-parser');
 
-// init project
-var express = require('express');
-var app = express();
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
 
-// enable CORS (https://en.wikipedia.org/wiki/Cross-origin_resource_sharing)
-// so that your API is remotely testable by FCC 
-var cors = require('cors');
-app.use(cors({optionsSuccessStatus: 200}));  // some legacy browsers choke on 204
+const siteSchema = new mongoose.Schema({
+  url: { type: String, required: true, unique: true },
+  index: { type: Number, required: true, min: 0, unique: true }
+});
+let Site = mongoose.model('Site', siteSchema);
 
-// http://expressjs.com/en/starter/static-files.html
-app.use(express.static('public'));
+// Basic Configuration
+const port = process.env.PORT || 3000;
 
-// http://expressjs.com/en/starter/basic-routing.html
-app.get("/", function (req, res) {
-  res.sendFile(__dirname + '/views/index.html');
+app.use(cors());
+
+app.use('/public', express.static(`${process.cwd()}/public`));
+
+app.use(bodyParser.urlencoded({extended: false}));
+
+app.get('/', function(req, res) {
+  res.sendFile(process.cwd() + '/views/index.html');
 });
 
+// Your first API endpoint
+app.get('/api/hello', function(req, res) {
+  res.json({ greeting: 'hello API' });
+});
 
-// your first API endpoint... 
-app.get("/api/hello", function (req, res) {
-  res.json({greeting: 'hello API'});
+// need MongoDB...
+
+/*
+2. You can POST a URL to /api/shorturl and get a JSON response with original_url and short_url properties. Here's an example: { original_url : 'https://freeCodeCamp.org', short_url : 1}
+
+4. If you pass an invalid URL that doesn't follow the valid http://www.example.com format, the JSON response will contain { error: 'invalid url' }
+*/
+app.post("/api/shorturl", (req, res) => {
+  const {url} = req.body;
+  const regexURL = /https?:\/\//;
+  const wrkURL = url.replace(regexURL, "");
+
+  console.log(`${url} => ${wrkURL}`);
+//  console.log(req);
+//  console.log(res);
+
+  if (regexURL.test(url)) {
+    dns.lookup(wrkURL, (err) => {
+      console.log(err);
+      if (err) {
+        res.json({error:	"Invalid URL"});
+      } else {
+        let wrkSite = Site.findOne({url: wrkURL});
+
+        console.log(wrkSite);
+        
+        if (wrkSite) {
+//          return res.status(400).send('User already exists.');
+        } else {
+          let idxSite = Site.sort({index: -1}).limit(1).select("index").exec(function(err, data) {
+            if (err) {
+              return done(err);
+            } else {
+              done(null, data);
+            }
+          });
+          console.log(idxSite);
+//          let new_idx = idxSite.index + 1;
+//          wrkSite = new Site({wrkURL, new_idx);
+//          Site.save();
+          // create new entry
+//          res.json(original_url: wrkURL, short_url: new_idx);;
+        }
+      }
+    });
+  } else {
+    res.json({error:	"Invalid URL"});
+  }
 });
 
 /*
- A request to /api/:date? with a valid date should return a JSON object with a unix key that is a Unix timestamp of the input date in milliseconds (as type Number)
-Waiting: 3. A request to /api/:date? with a valid date should return a JSON object with a utc key that is a string of the input date in the format: Thu, 01 Jan 1970 00:00:00 GMT
+3. When you visit /api/shorturl/<short_url>, you will be redirected to the original URL.
 */
+app.get("/api/shorturl/:idx", (req, res) => {
+  //console.log(req.params);
+  const {idx} = req.params;
 
-app.get("/api/:date", (req, res) => {
-  const {date} = req.params;
-  console.log(`0: ${date}`);
-  console.log(`0': ${Date.parse(date)}`);
+//  console.log(Number(idx));
 
-  if (isNaN(Date.parse(date))) {
-    if (Number(date)) {
-      const unix_time = Number(date);
-      const utc_time = new Date(unix_time).toUTCString();
+  if (!isNaN(Number(idx))) {
+    // find idx on the dB then redirect
+    let idxSite = Site.findOne({index: idx});
 
-//      console.log(`1: ${unix_time}`);
-//      console.log(`1: ${utc_time}`);
-
-      res.json({unix: unix_time, utc: utc_time});
+  //  console.log(idxSite.index);
+    
+    if (idxSite.index == undefined) {
+      //console.log("no site here");
+      res.json({error: "No short URL found for the given input"});
     } else {
-      res.json({error : "Invalid Date"});
+      res.redirect(`https://${idxSite.url}`);
     }
-  } else if (new Date(date)) {
-    const unix_time = Date.parse(date);
-    const utc_time = new Date(unix_time).toUTCString();
-
-//    console.log(`3: ${unix_time}`);
-//    console.log(`3: ${utc_time}`);
-
-    res.json({unix: unix_time, utc: utc_time});
+  } else {
+    res.json({error:	"Wrong format"});
   }
-
 });
 
-app.get("/api", function (req, res) {
-//  console.log("no param");
-  const unix_time = Date.now();
-  const utc_time = new Date().toUTCString();
 
-  console.log(`3: ${unix_time}`);
-  console.log(`3: ${utc_time}`);
-
-  res.json({unix: unix_time, utc: utc_time});
-});
-
-// Listen on port set in environment variable or default to 3000
-var listener = app.listen(process.env.PORT || 3000, function () {
-  console.log('Your app is listening on port ' + listener.address().port);
+app.listen(port, function() {
+  console.log(`Listening on port ${port}`);
 });
